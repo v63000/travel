@@ -176,8 +176,31 @@ export default function QuotationForm({ initialData, onClose }: QuotationFormPro
     setFormData({ ...formData, items: newItems, ...totals });
   };
 
+  const applyCategoryDiscount = (categoryId: string, discount: number) => {
+    if (profile?.role === 'quoter' && discount < 0.8) {
+      alert('普通报价员折扣不能低于 8 折，请联系管理员');
+      return;
+    }
+    const newItems = (formData.items || []).map(item => {
+      const product = products.find(p => p.id === item.productId);
+      const itemCategoryId = product?.bigCategoryId || 'other';
+      
+      if (itemCategoryId === categoryId) {
+        const finalDiscount = Math.max(discount, product?.minDiscount || 0);
+        return {
+          ...item,
+          discount: finalDiscount,
+          total: item.retailPrice * item.quantity * item.days * finalDiscount
+        };
+      }
+      return item;
+    });
+    const totals = calculateTotals(newItems);
+    setFormData({ ...formData, items: newItems, ...totals });
+  };
+
   const categorySummary = useMemo(() => {
-    const summary: { [key: string]: { name: string; retail: number; discounted: number } } = {};
+    const summary: { [key: string]: { id: string; name: string; retail: number; discounted: number } } = {};
     
     (formData.items || []).forEach(item => {
       const product = products.find(p => p.id === item.productId);
@@ -185,7 +208,7 @@ export default function QuotationForm({ initialData, onClose }: QuotationFormPro
       const categoryName = categories.find(c => c.id === categoryId)?.name || '其他';
       
       if (!summary[categoryId]) {
-        summary[categoryId] = { name: categoryName, retail: 0, discounted: 0 };
+        summary[categoryId] = { id: categoryId, name: categoryName, retail: 0, discounted: 0 };
       }
       summary[categoryId].retail += item.retailPrice * item.quantity * item.days;
       summary[categoryId].discounted += item.total;
@@ -394,20 +417,6 @@ export default function QuotationForm({ initialData, onClose }: QuotationFormPro
             <div className="p-6 border-b border-gray-100 flex justify-between items-center">
               <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider">项目明细</h3>
               <div className="flex items-center gap-2">
-                <button 
-                  type="button" 
-                  onClick={() => applyGlobalDiscount(0.9)}
-                  className="text-xs font-bold text-orange-600 bg-orange-50 px-2 py-1 rounded hover:bg-orange-100 transition-colors"
-                >
-                  整单 9 折
-                </button>
-                <button 
-                  type="button" 
-                  onClick={() => applyGlobalDiscount(0.8)}
-                  className="text-xs font-bold text-orange-600 bg-orange-50 px-2 py-1 rounded hover:bg-orange-100 transition-colors"
-                >
-                  整单 8 折
-                </button>
               </div>
             </div>
             <div className="overflow-x-auto">
@@ -417,6 +426,7 @@ export default function QuotationForm({ initialData, onClose }: QuotationFormPro
                     <th className="px-6 py-3">项目名称</th>
                     <th className="px-4 py-3 text-center">数量</th>
                     <th className="px-4 py-3 text-center">天数</th>
+                    <th className="px-4 py-3 text-center">折扣</th>
                     <th className="px-6 py-3 text-right">小计</th>
                     <th className="px-4 py-3"></th>
                   </tr>
@@ -445,6 +455,20 @@ export default function QuotationForm({ initialData, onClose }: QuotationFormPro
                           onChange={e => updateItem(index, { days: parseInt(e.target.value) })}
                           className="w-12 px-2 py-1 border border-gray-200 rounded text-center text-sm"
                         />
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="flex items-center justify-center gap-1">
+                          <input
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            max="10"
+                            value={item.discount * 10}
+                            onChange={e => updateItem(index, { discount: parseFloat(e.target.value) / 10 })}
+                            className="w-12 px-1 py-1 border border-gray-200 rounded text-center text-sm font-medium text-orange-600"
+                          />
+                          <span className="text-xs text-orange-600">折</span>
+                        </div>
                       </td>
                       <td className="px-6 py-4 text-right font-bold text-gray-900">
                         {formatCurrency(item.total)}
@@ -479,12 +503,21 @@ export default function QuotationForm({ initialData, onClose }: QuotationFormPro
                 <div className="space-y-2">
                   {categorySummary.length > 0 ? (
                     categorySummary.map(cat => (
-                      <div key={cat.name} className="flex justify-between items-center text-sm p-3 bg-gray-50 rounded-xl border border-gray-100">
+                      <div key={cat.id} className="flex justify-between items-center text-sm p-3 bg-gray-50 rounded-xl border border-gray-100">
                         <span className="text-gray-600 font-medium">{cat.name}</span>
-                        <div className="text-right">
+                        <div className="text-right flex flex-col items-end">
                           <div className="font-bold text-gray-900">{formatCurrency(cat.discounted)}</div>
-                          <div className="text-[10px] text-orange-600 font-bold">
-                            {((cat.discounted / cat.retail) * 10).toFixed(1)} 折
+                          <div className="flex items-center gap-1 mt-1">
+                            <input
+                              type="number"
+                              step="0.1"
+                              min="0"
+                              max="10"
+                              value={cat.retail > 0 ? ((cat.discounted / cat.retail) * 10).toFixed(1) : "10.0"}
+                              onChange={(e) => applyCategoryDiscount(cat.id, parseFloat(e.target.value) / 10)}
+                              className="w-12 px-1 py-0.5 border border-gray-200 rounded text-right text-[10px] font-bold text-orange-600 bg-white focus:ring-1 focus:ring-orange-500 outline-none"
+                            />
+                            <span className="text-[10px] text-orange-600 font-bold">折</span>
                           </div>
                         </div>
                       </div>
@@ -530,7 +563,7 @@ export default function QuotationForm({ initialData, onClose }: QuotationFormPro
         {/* Right: Product Selector */}
         <div className="space-y-6">
           <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm sticky top-8">
-            <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-6">产品库选择</h3>
+            <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-6">产品管理选择</h3>
             
             <div className="space-y-4 mb-6">
               <div className="relative">

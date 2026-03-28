@@ -1,5 +1,6 @@
 import React from 'react';
 import { useAuth } from './AuthContext';
+import { UserPermissions } from '../types';
 import { 
   LayoutDashboard, 
   Package, 
@@ -26,19 +27,35 @@ export default function Layout({ children, activeTab, setActiveTab }: LayoutProp
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
 
   const menuItems = [
-    { id: 'dashboard', label: '数据概览', icon: LayoutDashboard, roles: ['super_admin', 'admin', 'quoter', 'viewer'] },
-    { id: 'categories', label: '分类管理', icon: Tags, roles: ['super_admin', 'admin'] },
-    { id: 'products', label: '产品库', icon: Package, roles: ['super_admin', 'admin', 'quoter'] },
-    { id: 'quotations', label: '报价管理', icon: FileText, roles: ['super_admin', 'admin', 'quoter', 'viewer'] },
-    { id: 'contracts', label: '合同管理', icon: FileSignature, roles: ['super_admin', 'admin', 'quoter', 'viewer'] },
-    { id: 'customers', label: '客户管理', icon: Users, roles: ['super_admin', 'admin', 'quoter', 'viewer'] },
-    { id: 'users', label: '权限管理', icon: Users, roles: ['super_admin', 'admin'] },
-    { id: 'settings', label: '系统设置', icon: Settings, roles: ['super_admin', 'admin'] },
+    { id: 'dashboard', label: '数据概览', icon: LayoutDashboard, module: 'dashboard' as keyof UserPermissions },
+    { id: 'categories', label: '分类管理', icon: Tags, module: 'category' as keyof UserPermissions },
+    { id: 'products', label: '产品管理', icon: Package, module: 'product' as keyof UserPermissions },
+    { id: 'quotations', label: '报价管理', icon: FileText, module: 'quotation' as keyof UserPermissions },
+    { id: 'contracts', label: '合同管理', icon: FileSignature, module: 'contract' as keyof UserPermissions },
+    { id: 'customers', label: '客户管理', icon: Users, module: 'customer' as keyof UserPermissions },
+    { id: 'users', label: '权限管理', icon: Users, module: 'user' as keyof UserPermissions },
+    { id: 'settings', label: '系统设置', icon: Settings, module: 'settings' as keyof UserPermissions },
   ];
 
-  const filteredItems = menuItems.filter(item => 
-    profile && item.roles.includes(profile.role)
-  );
+  const filteredItems = menuItems.filter(item => {
+    if (!profile) return false;
+    // Super admin always has access
+    if (profile.role === 'super_admin') return true;
+    
+    // Check granular permissions if available
+    if (profile.permissions && profile.permissions[item.module]) {
+      return profile.permissions[item.module].view;
+    }
+
+    // Fallback to role-based defaults if no granular permissions set
+    const roleDefaults: Record<string, string[]> = {
+      admin: ['dashboard', 'categories', 'products', 'quotations', 'contracts', 'customers', 'settings'],
+      quoter: ['dashboard', 'quotations', 'contracts', 'customers'],
+      viewer: ['dashboard', 'quotations', 'contracts', 'customers']
+    };
+
+    return roleDefaults[profile.role]?.includes(item.id) || false;
+  });
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">

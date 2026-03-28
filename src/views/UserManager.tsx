@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { UserProfile, UserRole } from '../types';
+import { UserProfile, UserRole, UserPermissions, Permissions } from '../types';
 import { useAuth } from '../components/AuthContext';
-import { Shield, UserPlus, Trash2, Edit2, CheckCircle2, XCircle, X } from 'lucide-react';
+import { Shield, UserPlus, Trash2, Edit2, CheckCircle2, XCircle, X, ChevronDown, ChevronUp, Lock } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export default function UserManager() {
@@ -9,6 +9,7 @@ export default function UserManager() {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [newUser, setNewUser] = useState({ email: '', name: '', password: '', role: 'quoter' as UserRole });
+  const [editingPermissions, setEditingPermissions] = useState<string | null>(null);
 
   const fetchUsers = async () => {
     const token = localStorage.getItem('token');
@@ -37,7 +38,8 @@ export default function UserManager() {
       },
       body: JSON.stringify({
         ...newUser,
-        status: 'active'
+        status: 'active',
+        permissions: getDefaultPermissions(newUser.role)
       })
     });
 
@@ -49,6 +51,39 @@ export default function UserManager() {
       const err = await res.json();
       alert(err.error || '新增失败');
     }
+  };
+
+  const getDefaultPermissions = (role: UserRole): UserPermissions => {
+    const full: Permissions = { view: true, edit: true };
+    const viewOnly: Permissions = { view: true, edit: false };
+    const none: Permissions = { view: false, edit: false };
+
+    if (role === 'super_admin') {
+      return {
+        dashboard: full, category: full, product: full,
+        quotation: full, contract: full, customer: full,
+        user: full, settings: full
+      };
+    }
+    if (role === 'admin') {
+      return {
+        dashboard: full, category: full, product: full,
+        quotation: full, contract: full, customer: full,
+        user: none, settings: full
+      };
+    }
+    if (role === 'quoter') {
+      return {
+        dashboard: viewOnly, category: viewOnly, product: viewOnly,
+        quotation: full, contract: full, customer: full,
+        user: none, settings: none
+      };
+    }
+    return {
+      dashboard: viewOnly, category: viewOnly, product: viewOnly,
+      quotation: viewOnly, contract: viewOnly, customer: viewOnly,
+      user: none, settings: none
+    };
   };
 
   const handleUpdateRole = async (userId: string, role: UserRole) => {
@@ -63,9 +98,35 @@ export default function UserManager() {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`
       },
-      body: JSON.stringify({ role })
+      body: JSON.stringify({ role, permissions: getDefaultPermissions(role) })
     });
     fetchUsers();
+  };
+
+  const handleUpdatePermissions = async (userId: string, permissions: UserPermissions) => {
+    if (profile?.role !== 'super_admin') return;
+    const token = localStorage.getItem('token');
+    await fetch(`/api/users/${userId}`, {
+      method: 'PUT',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ permissions })
+    });
+    fetchUsers();
+  };
+
+  const handleTogglePermission = (user: UserProfile, module: keyof UserPermissions, type: 'view' | 'edit') => {
+    const currentPermissions = user.permissions || getDefaultPermissions(user.role);
+    const newPermissions = {
+      ...currentPermissions,
+      [module]: {
+        ...currentPermissions[module],
+        [type]: !currentPermissions[module][type]
+      }
+    };
+    handleUpdatePermissions(user.id, newPermissions);
   };
 
   const handleToggleStatus = async (user: UserProfile) => {
@@ -99,8 +160,19 @@ export default function UserManager() {
     { value: 'viewer', label: '查看员', color: 'text-gray-600 bg-gray-50' },
   ];
 
+  const modules: { key: keyof UserPermissions; label: string }[] = [
+    { key: 'dashboard', label: '数据概览' },
+    { key: 'category', label: '分类管理' },
+    { key: 'product', label: '产品管理' },
+    { key: 'quotation', label: '报价管理' },
+    { key: 'contract', label: '合同管理' },
+    { key: 'customer', label: '客户管理' },
+    { key: 'user', label: '权限管理' },
+    { key: 'settings', label: '系统设置' },
+  ];
+
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="max-w-5xl mx-auto pb-20">
       <div className="flex justify-between items-center mb-8">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">权限管理</h2>
@@ -174,57 +246,112 @@ export default function UserManager() {
           </thead>
           <tbody className="divide-y divide-gray-100">
             {users.map(user => (
-              <tr key={user.id} className="hover:bg-gray-50 transition-colors">
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold">
-                      {user.name.charAt(0)}
+              <React.Fragment key={user.id}>
+                <tr className="hover:bg-gray-50 transition-colors">
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold">
+                        {user.name.charAt(0)}
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-gray-900">{user.name}</p>
+                        <p className="text-xs text-gray-400">{user.email}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm font-bold text-gray-900">{user.name}</p>
-                      <p className="text-xs text-gray-400">{user.email}</p>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  <select
-                    value={user.role}
-                    disabled={profile?.role !== 'super_admin' || user.id === profile.id}
-                    onChange={(e) => handleUpdateRole(user.id, e.target.value as UserRole)}
-                    className={cn(
-                      "text-xs font-bold px-3 py-1.5 rounded-lg border-none focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer",
-                      roles.find(r => r.value === user.role)?.color
-                    )}
-                  >
-                    {roles.map(role => (
-                      <option key={role.value} value={role.value}>{role.label}</option>
-                    ))}
-                  </select>
-                </td>
-                <td className="px-6 py-4 text-center">
-                  <button
-                    onClick={() => handleToggleStatus(user)}
-                    disabled={user.id === profile?.id}
-                    className={cn(
-                      "inline-flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full transition-all",
-                      user.status === 'active' ? "text-green-600 bg-green-50" : "text-red-600 bg-red-50"
-                    )}
-                  >
-                    {user.status === 'active' ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
-                    {user.status === 'active' ? '正常' : '禁用'}
-                  </button>
-                </td>
-                <td className="px-6 py-4 text-right">
-                  {user.id !== profile?.id && profile?.role === 'super_admin' && (
-                    <button 
-                      onClick={() => handleDeleteUser(user.id)}
-                      className="p-2 text-gray-300 hover:text-red-600 transition-colors"
+                  </td>
+                  <td className="px-6 py-4">
+                    <select
+                      value={user.role}
+                      disabled={profile?.role !== 'super_admin' || user.id === profile.id}
+                      onChange={(e) => handleUpdateRole(user.id, e.target.value as UserRole)}
+                      className={cn(
+                        "text-xs font-bold px-3 py-1.5 rounded-lg border-none focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer",
+                        roles.find(r => r.value === user.role)?.color
+                      )}
                     >
-                      <Trash2 className="w-4 h-4" />
+                      {roles.map(role => (
+                        <option key={role.value} value={role.value}>{role.label}</option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                    <button
+                      onClick={() => handleToggleStatus(user)}
+                      disabled={user.id === profile?.id}
+                      className={cn(
+                        "inline-flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full transition-all",
+                        user.status === 'active' ? "text-green-600 bg-green-50" : "text-red-600 bg-red-50"
+                      )}
+                    >
+                      {user.status === 'active' ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+                      {user.status === 'active' ? '正常' : '禁用'}
                     </button>
-                  )}
-                </td>
-              </tr>
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => setEditingPermissions(editingPermissions === user.id ? null : user.id)}
+                        className={cn(
+                          "p-2 rounded-lg transition-colors",
+                          editingPermissions === user.id ? "text-blue-600 bg-blue-50" : "text-gray-300 hover:text-blue-600 hover:bg-blue-50"
+                        )}
+                        title="详细权限设置"
+                      >
+                        <Lock className="w-4 h-4" />
+                      </button>
+                      {user.id !== profile?.id && profile?.role === 'super_admin' && (
+                        <button 
+                          onClick={() => handleDeleteUser(user.id)}
+                          className="p-2 text-gray-300 hover:text-red-600 transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+                {editingPermissions === user.id && (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-4 bg-gray-50 border-b border-gray-100">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        {modules.map(module => {
+                          const perms = user.permissions?.[module.key] || getDefaultPermissions(user.role)[module.key];
+                          return (
+                            <div key={module.key} className="bg-white p-3 rounded-xl border border-gray-200 shadow-sm">
+                              <p className="text-xs font-bold text-gray-900 mb-3 flex items-center justify-between">
+                                {module.label}
+                                <Shield className="w-3 h-3 text-blue-500" />
+                              </p>
+                              <div className="flex items-center gap-4">
+                                <label className="flex items-center gap-2 cursor-pointer group">
+                                  <input
+                                    type="checkbox"
+                                    checked={perms.view}
+                                    onChange={() => handleTogglePermission(user, module.key, 'view')}
+                                    disabled={profile?.role !== 'super_admin'}
+                                    className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                  />
+                                  <span className="text-xs text-gray-500 group-hover:text-gray-700">查看</span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer group">
+                                  <input
+                                    type="checkbox"
+                                    checked={perms.edit}
+                                    onChange={() => handleTogglePermission(user, module.key, 'edit')}
+                                    disabled={profile?.role !== 'super_admin'}
+                                    className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                  />
+                                  <span className="text-xs text-gray-500 group-hover:text-gray-700">编辑</span>
+                                </label>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
             ))}
           </tbody>
         </table>
@@ -235,10 +362,11 @@ export default function UserManager() {
         <div>
           <h4 className="text-sm font-bold text-blue-900 mb-1">权限说明</h4>
           <ul className="text-xs text-blue-700 space-y-1 list-disc list-inside">
-            <li><strong>超级管理员：</strong> 拥有所有权限，包括修改其他用户的角色。</li>
-            <li><strong>管理员：</strong> 可管理产品库、分类和查看所有报价单。</li>
-            <li><strong>报价员：</strong> 仅可创建和管理自己的报价单，折扣受限。</li>
-            <li><strong>查看员：</strong> 仅可查看数据和报价单，不可修改。</li>
+            <li><strong>超级管理员：</strong> 拥有所有权限，包括修改其他用户的角色和详细模块权限。</li>
+            <li><strong>管理员：</strong> 默认可管理产品、分类和查看所有报价单。</li>
+            <li><strong>报价员：</strong> 默认仅可创建和管理自己的报价单，折扣受限。</li>
+            <li><strong>查看员：</strong> 默认仅可查看数据和报价单，不可修改。</li>
+            <li><strong>详细权限：</strong> 点击用户行末尾的锁图标，可针对每个模块单独开启/关闭查看和编辑权限。</li>
           </ul>
         </div>
       </div>

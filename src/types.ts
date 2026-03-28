@@ -1,11 +1,28 @@
 export type UserRole = 'super_admin' | 'admin' | 'quoter' | 'viewer';
 
+export interface Permissions {
+  view: boolean;
+  edit: boolean;
+}
+
+export interface UserPermissions {
+  dashboard: Permissions;
+  quotation: Permissions;
+  contract: Permissions;
+  customer: Permissions;
+  product: Permissions;
+  category: Permissions;
+  user: Permissions;
+  settings: Permissions;
+}
+
 export interface UserProfile {
   id: string;
   email: string;
   role: UserRole;
   name: string;
   status: 'active' | 'inactive';
+  permissions?: UserPermissions;
 }
 
 export interface Category {

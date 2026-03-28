@@ -172,7 +172,11 @@ export default function QuotationManager() {
     return (
       <QuotationForm 
         initialData={editingQuotation || undefined} 
-        onClose={() => { setIsAdding(false); setEditingQuotation(null); }} 
+        onClose={() => { 
+          setIsAdding(false); 
+          setEditingQuotation(null); 
+          fetchQuotations();
+        }} 
       />
     );
   }

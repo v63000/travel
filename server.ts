@@ -45,6 +45,7 @@ async function startServer() {
 
     const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '24h' });
     const { password: _, ...userProfile } = user;
+    if (userProfile.permissions) userProfile.permissions = JSON.parse(userProfile.permissions);
     res.json({ token, profile: userProfile });
   });
 
@@ -79,6 +80,7 @@ async function startServer() {
     const user = await db.get('SELECT * FROM users WHERE id = ?', [req.user.id]);
     if (!user) return res.status(404).json({ message: '用户不存在' });
     const { password: _, ...userProfile } = user;
+    if (userProfile.permissions) userProfile.permissions = JSON.parse(userProfile.permissions);
     res.json(userProfile);
   });
 
@@ -113,20 +115,20 @@ async function startServer() {
   });
 
   app.post('/api/products', authenticateToken, async (req, res) => {
-    const { categoryId, name, description, unit, costPrice, retailPrice, imageUrl, status } = req.body;
+    const { bigCategoryId, smallCategoryId, name, description, unit, costPrice, retailPrice, minDiscount, imageUrl, status } = req.body;
     const id = Math.random().toString(36).substring(2, 15);
     await db.run(
-      'INSERT INTO products (id, categoryId, name, description, unit, costPrice, retailPrice, imageUrl, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, categoryId, name, description, unit, costPrice, retailPrice, imageUrl, status, new Date().toISOString()]
+      'INSERT INTO products (id, bigCategoryId, smallCategoryId, name, description, unit, costPrice, retailPrice, minDiscount, imageUrl, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, bigCategoryId, smallCategoryId, name, description, unit, costPrice, retailPrice, minDiscount, imageUrl, status, new Date().toISOString()]
     );
     res.json({ id, ...req.body });
   });
 
   app.put('/api/products/:id', authenticateToken, async (req, res) => {
-    const { categoryId, name, description, unit, costPrice, retailPrice, imageUrl, status } = req.body;
+    const { bigCategoryId, smallCategoryId, name, description, unit, costPrice, retailPrice, minDiscount, imageUrl, status } = req.body;
     await db.run(
-      'UPDATE products SET categoryId = ?, name = ?, description = ?, unit = ?, costPrice = ?, retailPrice = ?, imageUrl = ?, status = ? WHERE id = ?',
-      [categoryId, name, description, unit, costPrice, retailPrice, imageUrl, status, req.params.id]
+      'UPDATE products SET bigCategoryId = ?, smallCategoryId = ?, name = ?, description = ?, unit = ?, costPrice = ?, retailPrice = ?, minDiscount = ?, imageUrl = ?, status = ? WHERE id = ?',
+      [bigCategoryId, smallCategoryId, name, description, unit, costPrice, retailPrice, minDiscount, imageUrl, status, req.params.id]
     );
     res.json({ id: req.params.id, ...req.body });
   });
@@ -143,20 +145,20 @@ async function startServer() {
   });
 
   app.post('/api/quotations', authenticateToken, async (req, res) => {
-    const { clientName, contactPerson, phone, date, headCount, items, totalRetail, totalDiscounted, perPerson, status } = req.body;
+    const { customerId, clientName, contactPerson, phone, date, headCount, items, totalRetail, totalDiscounted, perPerson, status, quoterId } = req.body;
     const id = Math.random().toString(36).substring(2, 15);
     await db.run(
-      'INSERT INTO quotations (id, clientName, contactPerson, phone, date, headCount, items, totalRetail, totalDiscounted, perPerson, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, clientName, contactPerson, phone, date, headCount, JSON.stringify(items), totalRetail, totalDiscounted, perPerson, status, new Date().toISOString()]
+      'INSERT INTO quotations (id, customerId, clientName, contactPerson, phone, date, headCount, items, totalRetail, totalDiscounted, perPerson, status, quoterId, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, customerId, clientName, contactPerson, phone, date, headCount, JSON.stringify(items), totalRetail, totalDiscounted, perPerson, status, quoterId, new Date().toISOString()]
     );
     res.json({ id, ...req.body });
   });
 
   app.put('/api/quotations/:id', authenticateToken, async (req, res) => {
-    const { clientName, contactPerson, phone, date, headCount, items, totalRetail, totalDiscounted, perPerson, status } = req.body;
+    const { customerId, clientName, contactPerson, phone, date, headCount, items, totalRetail, totalDiscounted, perPerson, status, quoterId } = req.body;
     await db.run(
-      'UPDATE quotations SET clientName = ?, contactPerson = ?, phone = ?, date = ?, headCount = ?, items = ?, totalRetail = ?, totalDiscounted = ?, perPerson = ?, status = ? WHERE id = ?',
-      [clientName, contactPerson, phone, date, headCount, JSON.stringify(items), totalRetail, totalDiscounted, perPerson, status, req.params.id]
+      'UPDATE quotations SET customerId = ?, clientName = ?, contactPerson = ?, phone = ?, date = ?, headCount = ?, items = ?, totalRetail = ?, totalDiscounted = ?, perPerson = ?, status = ?, quoterId = ? WHERE id = ?',
+      [customerId, clientName, contactPerson, phone, date, headCount, JSON.stringify(items), totalRetail, totalDiscounted, perPerson, status, quoterId, req.params.id]
     );
     res.json({ id: req.params.id, ...req.body });
   });
@@ -173,20 +175,20 @@ async function startServer() {
   });
 
   app.post('/api/contracts', authenticateToken, async (req, res) => {
-    const { quotationId, contractNumber, clientName, amount, status, content } = req.body;
+    const { quotationId, customerId, contractNumber, clientName, amount, status, content, signedAt } = req.body;
     const id = Math.random().toString(36).substring(2, 15);
     await db.run(
-      'INSERT INTO contracts (id, quotationId, contractNumber, clientName, amount, status, content, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, quotationId, contractNumber, clientName, amount, status, content, new Date().toISOString()]
+      'INSERT INTO contracts (id, quotationId, customerId, contractNumber, clientName, amount, status, content, signedAt, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, quotationId, customerId, contractNumber, clientName, amount, status, content, signedAt, new Date().toISOString()]
     );
     res.json({ id, ...req.body });
   });
 
   app.put('/api/contracts/:id', authenticateToken, async (req, res) => {
-    const { quotationId, contractNumber, clientName, amount, status, content } = req.body;
+    const { quotationId, customerId, contractNumber, clientName, amount, status, content, signedAt } = req.body;
     await db.run(
-      'UPDATE contracts SET quotationId = ?, contractNumber = ?, clientName = ?, amount = ?, status = ?, content = ? WHERE id = ?',
-      [quotationId, contractNumber, clientName, amount, status, content, req.params.id]
+      'UPDATE contracts SET quotationId = ?, customerId = ?, contractNumber = ?, clientName = ?, amount = ?, status = ?, content = ?, signedAt = ? WHERE id = ?',
+      [quotationId, customerId, contractNumber, clientName, amount, status, content, signedAt, req.params.id]
     );
     res.json({ id: req.params.id, ...req.body });
   });
@@ -233,20 +235,20 @@ async function startServer() {
   });
 
   app.post('/api/customers', authenticateToken, async (req, res) => {
-    const { name, company, phone, email, address, status } = req.body;
+    const { name, contactPerson, phone, email, address, taxId, notes } = req.body;
     const id = Math.random().toString(36).substring(2, 15);
     await db.run(
-      'INSERT INTO customers (id, name, company, phone, email, address, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, name, company, phone, email, address, status, new Date().toISOString()]
+      'INSERT INTO customers (id, name, contactPerson, phone, email, address, taxId, notes, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, name, contactPerson, phone, email, address, taxId, notes, new Date().toISOString()]
     );
     res.json({ id, ...req.body });
   });
 
   app.put('/api/customers/:id', authenticateToken, async (req, res) => {
-    const { name, company, phone, email, address, status } = req.body;
+    const { name, contactPerson, phone, email, address, taxId, notes } = req.body;
     await db.run(
-      'UPDATE customers SET name = ?, company = ?, phone = ?, email = ?, address = ?, status = ? WHERE id = ?',
-      [name, company, phone, email, address, status, req.params.id]
+      'UPDATE customers SET name = ?, contactPerson = ?, phone = ?, email = ?, address = ?, taxId = ?, notes = ? WHERE id = ?',
+      [name, contactPerson, phone, email, address, taxId, notes, req.params.id]
     );
     res.json({ id: req.params.id, ...req.body });
   });
@@ -259,30 +261,33 @@ async function startServer() {
   // Users Management API (for super_admin)
   app.get('/api/users', authenticateToken, async (req: any, res) => {
     if (req.user.role !== 'super_admin') return res.sendStatus(403);
-    const users = await db.all('SELECT id, email, name, role, status, createdAt FROM users ORDER BY createdAt DESC');
-    res.json(users);
+    const users = await db.all('SELECT id, email, name, role, status, permissions, createdAt FROM users ORDER BY createdAt DESC');
+    res.json(users.map(u => ({ ...u, permissions: u.permissions ? JSON.parse(u.permissions) : null })));
   });
 
   app.post('/api/users', authenticateToken, async (req: any, res) => {
     if (req.user.role !== 'super_admin') return res.sendStatus(403);
-    const { email, name, password, role, status } = req.body;
+    const { email, name, password, role, status, permissions } = req.body;
     const existingUser = await db.get('SELECT * FROM users WHERE email = ?', [email]);
     if (existingUser) return res.status(400).json({ error: '邮箱已被占用' });
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const id = Math.random().toString(36).substring(2, 15);
     await db.run(
-      'INSERT INTO users (id, email, password, name, role, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [id, email, hashedPassword, name, role, status, new Date().toISOString()]
+      'INSERT INTO users (id, email, password, name, role, status, permissions, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, email, hashedPassword, name, role, status, permissions ? JSON.stringify(permissions) : null, new Date().toISOString()]
     );
-    res.json({ id, email, name, role, status });
+    res.json({ id, email, name, role, status, permissions });
   });
 
   app.put('/api/users/:id', authenticateToken, async (req: any, res) => {
     if (req.user.role !== 'super_admin') return res.sendStatus(403);
-    const { name, role, status } = req.body;
-    await db.run('UPDATE users SET name = ?, role = ?, status = ? WHERE id = ?', [name, role, status, req.params.id]);
-    res.json({ id: req.params.id, name, role, status });
+    const { name, role, status, permissions } = req.body;
+    await db.run(
+      'UPDATE users SET name = ?, role = ?, status = ?, permissions = ? WHERE id = ?',
+      [name, role, status, permissions ? JSON.stringify(permissions) : JSON.stringify(null), req.params.id]
+    );
+    res.json({ id: req.params.id, name, role, status, permissions });
   });
 
   app.delete('/api/users/:id', authenticateToken, async (req: any, res) => {
